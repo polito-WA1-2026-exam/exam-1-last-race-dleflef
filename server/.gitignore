@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+Desktop.ini
+Thumbs.db
+
+
+# Claude Code
+.claude/

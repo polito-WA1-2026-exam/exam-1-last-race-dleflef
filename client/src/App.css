@@ -1,0 +1,28 @@
+/* App-level overrides — component-specific styles live in each component file */
+
+/* Segments that can't be added look non-interactive */
+.segment-disabled {
+  pointer-events: none;
+}
+
+/* Clickable segment rows */
+.segment-item:hover {
+  background-color: #f0f4ff;
+}
+
+/* Execution step cards fade-slide in as they're revealed */
+.step-card {
+  animation: stepReveal 0.35s ease-out both;
+}
+
+@keyframes stepReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
