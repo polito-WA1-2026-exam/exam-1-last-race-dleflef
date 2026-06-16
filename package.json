@@ -1,0 +1,13 @@
+{
+  "name": "last-race",
+  "version": "1.0.0",
+  "description": "Last Race — exam project",
+  "private": true,
+  "scripts": {
+    "postinstall": "npm --prefix server install && npm --prefix client install",
+    "dev": "concurrently --kill-others-on-fail -n server,client -c cyan,magenta \"nodemon server/index.js\" \"npm --prefix client run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

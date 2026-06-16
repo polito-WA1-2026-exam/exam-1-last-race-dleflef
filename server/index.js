@@ -9,20 +9,15 @@ import db from './db.js';
 const app = express();
 const port = 3001;
 
-// Middleware Setup
-// configures the foundational security and session handlers for the application.
+// ── Middleware ────────────────────────────────────────────────────────────────
 
 app.use(express.json());
 
-// Cross-Origin Resource Sharing is enabled specifically for the React development server.
-// The credentials flag is strictly required to allow session cookies to pass between ports.
 app.use(cors({
   origin: 'http://localhost:5173',
   credentials: true,
 }));
 
-// Express-session manages the user state across requests.
-// Setting httpOnly adds a layer of security against cross-site scripting (XSS) attacks.
 app.use(session({
   secret: 'lastracing-secret-key-2026',
   resave: false,
@@ -33,21 +28,18 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Passport Configuration
-// Passport is used here to securely handle local authentication without rolling a custom solution.
+// ── Passport ──────────────────────────────────────────────────────────────────
 
 passport.use(new LocalStrategy((username, password, done) => {
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
   if (!user) return done(null, false, { message: 'Incorrect username.' });
 
-  // The submitted password is encrypted using the user's unique salt and compared against the stored hash.
   const hash = crypto.scryptSync(password, user.salt, 64).toString('hex');
   if (hash !== user.hash) return done(null, false, { message: 'Incorrect password.' });
 
   return done(null, { id: user.id, username: user.username });
 }));
 
-// These two functions tell Passport how to pack and unpack the user ID into the session cookie.
 passport.serializeUser((user, done) => done(null, user.id));
 
 passport.deserializeUser((id, done) => {
@@ -55,21 +47,17 @@ passport.deserializeUser((id, done) => {
   done(null, user || false);
 });
 
-// Authentication Guard
-// This custom middleware is attached to protected API routes. 
-// It intercepts requests from unauthenticated users and immediately returns a 401 error.
+// ── Auth guard ────────────────────────────────────────────────────────────────
 
 function isLoggedIn(req, res, next) {
   if (req.isAuthenticated()) return next();
   res.status(401).json({ error: 'Not authenticated' });
 }
 
-// Network Graph Helpers
-// Because the metro network never changes during the game, this data is computed 
-// exactly once when the server starts up to save processing time later.
+// ── Network graph helpers (computed once — the network never changes) ─────────
 
-// An adjacency Map is built to track which stations are directly connected.
-// Both directions are explicitly stored to create an undirected graph.
+// Returns adjacency Map: station_id → [neighbor_id, ...]
+// Both directions are stored so the graph is undirected.
 function buildAdjacency() {
   const rows = db.prepare(`
     SELECT ls1.station_id AS s1, ls2.station_id AS s2
@@ -91,9 +79,7 @@ function buildAdjacency() {
 const adjacency = buildAdjacency();
 const allStationIds = db.prepare('SELECT id FROM stations').all().map(r => r.id);
 
-// A Breadth First Search (BFS) algorithm computes the shortest path distances.
-// This is used to guarantee that the randomly selected start and destination stations 
-// are always at least 3 segments apart, as required by the exam.
+// BFS — returns Map<stationId, distanceFromStart>
 function bfsDistances(startId) {
   const dist = new Map([[startId, 0]]);
   const queue = [startId];
@@ -110,8 +96,8 @@ function bfsDistances(startId) {
   return dist;
 }
 
-// A reusable SQL query is defined here to fetch all valid station pairings (segments) 
-// along with their parent line's name and color.
+// Reusable SQL for fetching all segments with full line metadata.
+// A segment is any pair of stations adjacent on the same line.
 const segmentsQuery = db.prepare(`
   SELECT
     s1.id   AS station1_id,   s1.name AS station1_name,
@@ -126,10 +112,9 @@ const segmentsQuery = db.prepare(`
   ORDER BY l.id, ls1.position
 `);
 
-// Route Validation Prepared Statements
-// These SQL queries handle the complex business logic of determining if a player's route is legal.
+// ── Route-validation prepared statements ─────────────────────────────────────
 
-// Checks which lines connect two directly adjacent stations.
+// Lines on which stationA and stationB are directly adjacent (either direction).
 const getSegmentLines = db.prepare(`
   SELECT DISTINCT ls1.line_id
   FROM line_stations ls1
@@ -139,37 +124,41 @@ const getSegmentLines = db.prepare(`
   WHERE ls1.station_id = ? AND ls2.station_id = ?
 `);
 
-// Counts how many distinct lines serve a given station. 
-// If the count is greater than 1, the station is an interchange.
+// How many distinct lines serve a station (> 1 → interchange).
 const getStationLineCount = db.prepare(`
   SELECT COUNT(DISTINCT line_id) AS cnt
   FROM line_stations
   WHERE station_id = ?
 `);
 
-// A cached dictionary of station IDs to names is generated for quick lookups during the scoring phase.
+// Cached station id→name map (network never changes).
 const stationNameMap = db
   .prepare('SELECT id, name FROM stations')
   .all()
   .reduce((m, s) => { m[s.id] = s.name; return m; }, {});
 
-// The entire pool of random events is fetched once at startup.
+// All events, fetched once.
 const allEvents = db.prepare('SELECT description, effect FROM events').all();
 
-// Route Validation Logic
-// This function verifies the player's submitted route against four strict exam rules:
-// 1) The route must contain at least one segment (two stations).
-// 2) The route must start and end at the server-assigned stations.
-// 3) Every pair of stations must be adjacent on the network.
-// 4) Line changes are only permitted at valid interchange stations.
+// ── Route validation ──────────────────────────────────────────────────────────
+//
+// route  : number[]  ordered station IDs submitted by the client
+// startId: number    server-assigned start station
+// endId  : number    server-assigned destination station
+//
+// Returns true only when every rule below is satisfied:
+//   1. At least two stations (one segment).
+//   2. Starts at startId, ends at endId.
+//   3. Every consecutive pair is adjacent on at least one line.
+//   4. Line changes are allowed only at interchange stations
+//      (stations that appear on two or more lines).
 
 function validateRoute(route, startId, endId) {
   if (!Array.isArray(route) || route.length < 2) return false;
   if (route.some(id => !Number.isInteger(id) || id <= 0)) return false;
   if (route[0] !== startId || route[route.length - 1] !== endId) return false;
 
-  // A Set is used to track segments to ensure no segment is traversed more than once, 
-  // even if individual stations are visited multiple times.
+  // No segment may be traversed more than once (stations may repeat, segments must not)
   const usedSegments = new Set();
   for (let i = 0; i < route.length - 1; i++) {
     const key = [route[i], route[i + 1]].sort((a, b) => a - b).join('-');
@@ -184,30 +173,26 @@ function validateRoute(route, startId, endId) {
     const toId   = route[i + 1];
 
     const validLineIds = getSegmentLines.all(fromId, toId).map(r => r.line_id);
-    if (validLineIds.length === 0) return false; 
+    if (validLineIds.length === 0) return false; // fromId and toId are not adjacent on any line
 
-    // For the very first segment, the player boards whichever line serves it.
     if (currentLineId === null) {
-      currentLineId = validLineIds[0]; 
-    } 
-    // If the current line serves the next segment, the journey continues without interruption.
-    else if (validLineIds.includes(currentLineId)) {
-      // No change needed
-    } 
-    // If a line change is required, the current station is checked to ensure it is actually an interchange.
-    else {
+      currentLineId = validLineIds[0]; // first segment — board whichever line serves it
+    } else if (validLineIds.includes(currentLineId)) {
+      // continuing on the same line — no change needed
+    } else {
+      // line change required at fromId: fromId must be an interchange
       const { cnt } = getStationLineCount.get(fromId);
-      if (cnt < 2) return false; 
-      currentLineId = validLineIds[0]; 
+      if (cnt < 2) return false; // non-interchange, line change illegal
+      currentLineId = validLineIds[0]; // switch to the line that serves this segment
     }
   }
 
   return true;
 }
 
-// Authentication Endpoints
+// ── Auth routes ───────────────────────────────────────────────────────────────
 
-// The login route attempts to authenticate the user and establish a session.
+// POST /api/sessions — login
 app.post('/api/sessions', (req, res, next) => {
   passport.authenticate('local', (err, user, info) => {
     if (err) return next(err);
@@ -219,7 +204,7 @@ app.post('/api/sessions', (req, res, next) => {
   })(req, res, next);
 });
 
-// The logout route destroys the user's session cookie.
+// DELETE /api/sessions/current — logout
 app.delete('/api/sessions/current', (req, res) => {
   req.logout((err) => {
     if (err) return res.status(500).json({ error: 'Logout failed' });
@@ -227,7 +212,7 @@ app.delete('/api/sessions/current', (req, res) => {
   });
 });
 
-// The session check route allows the React frontend to verify if the user is currently logged in.
+// GET /api/sessions/current — check session
 app.get('/api/sessions/current', (req, res) => {
   if (req.isAuthenticated()) {
     res.json({ id: req.user.id, username: req.user.username });
@@ -236,10 +221,11 @@ app.get('/api/sessions/current', (req, res) => {
   }
 });
 
-// Game API Endpoints
+// ── Game APIs ─────────────────────────────────────────────────────────────────
 
-// Fetches the complete network map for the initial Setup phase.
-// It returns every line, its ordered list of stations, and all available segments.
+// GET /api/network — full map for the Setup phase.
+// Returns every line (with its ordered station list) and every segment.
+// Only authenticated users may access game data.
 app.get('/api/network', isLoggedIn, (req, res) => {
   const lines = db.prepare(`
     SELECT l.id, l.name, l.color
@@ -247,7 +233,7 @@ app.get('/api/network', isLoggedIn, (req, res) => {
     ORDER BY l.id
   `).all();
 
-  // The ordered station list is attached directly to each respective line.
+  // Attach ordered station list to each line
   const stationsForLine = db.prepare(`
     SELECT ls.line_id, s.id, s.name, ls.position
     FROM line_stations ls
@@ -265,17 +251,19 @@ app.get('/api/network', isLoggedIn, (req, res) => {
   res.json({ lines, stations, segments });
 });
 
-
-// Initializes a new game instance.
-// It selects a random start and destination pair, ensuring they are separated by a minimum of 3 segments.
-app.post('/api/planning', isLoggedIn, (req, res) => {
-  // Any previously abandoned games are purged from the database to maintain a clean state.
+// GET /api/planning — start a new game.
+// Picks a random (start, destination) pair with BFS distance ≥ 3,
+// persists a game record (score NULL = in progress), and returns
+// the assignment plus the full segment list for the planning phase.
+app.get('/api/planning', isLoggedIn, (req, res) => {
+  // Clean up any previously abandoned in-progress games for this user
   db.prepare('DELETE FROM games WHERE user_id = ? AND score IS NULL').run(req.user.id);
 
+  // Find a valid (start, end) pair using BFS
   let startId, endId;
   let found = false;
 
-  // The station list is shuffled so that retries attempt different starting points.
+  // Shuffle station list so retries try different starts
   const shuffled = [...allStationIds].sort(() => Math.random() - 0.5);
 
   for (const sid of shuffled) {
@@ -296,13 +284,13 @@ app.post('/api/planning', isLoggedIn, (req, res) => {
     return res.status(500).json({ error: 'Could not find a valid start/destination pair.' });
   }
 
-  // The new game record is persisted to the database with a NULL score to indicate it is in progress.
+  // Persist the game record
   const gameId = db.prepare(`
     INSERT INTO games (user_id, start_station_id, end_station_id)
     VALUES (?, ?, ?)
   `).run(req.user.id, startId, endId).lastInsertRowid;
 
-  // The game ID is stored in the session to prevent malicious cross-game manipulation.
+  // Store game ID in session as a guard against route-tampering
   req.session.currentGameId = gameId;
 
   const startStation = db.prepare('SELECT id, name FROM stations WHERE id = ?').get(startId);
@@ -312,8 +300,8 @@ app.post('/api/planning', isLoggedIn, (req, res) => {
   res.json({ gameId, startStation, endStation, segments });
 });
 
-
-// Retrieves the leaderboard data, listing the single highest score achieved by each registered user.
+// GET /api/ranking — best score per user, descending.
+// Only users who have completed at least one game appear in the list.
 app.get('/api/ranking', isLoggedIn, (req, res) => {
   const ranking = db.prepare(`
     SELECT u.username, MAX(g.score) AS best_score
@@ -327,9 +315,20 @@ app.get('/api/ranking', isLoggedIn, (req, res) => {
   res.json(ranking);
 });
 
-
-// Evaluates the player's submitted route and calculates the final score.
-// It enforces strict security checks before determining if the route is valid.
+// POST /api/execute-route — validate the submitted route and score the game.
+//
+// Body: { gameId: number, route: number[] }
+//   gameId — the ID returned by GET /api/planning
+//   route  — ordered array of station IDs representing the player's path
+//
+// Security checks (in order):
+//   • The game must exist and belong to the current user.
+//   • The game must still be in progress (score IS NULL).
+//   • gameId must match the one stored in the session (prevents cross-game manipulation).
+//
+// Outcomes:
+//   Invalid / incomplete route → score saved as 0, steps array is empty.
+//   Valid route → 20 starting coins, one random event per segment, score = max(0, total).
 app.post('/api/execute-route', isLoggedIn, (req, res) => {
   const { gameId, route } = req.body;
 
@@ -337,7 +336,7 @@ app.post('/api/execute-route', isLoggedIn, (req, res) => {
     return res.status(400).json({ error: 'Invalid request body.' });
   }
 
-  // The database is checked to ensure the game belongs to the current user and is actually in progress.
+  // Verify ownership and in-progress status
   const game = db.prepare(`
     SELECT id, start_station_id, end_station_id
     FROM games
@@ -348,21 +347,20 @@ app.post('/api/execute-route', isLoggedIn, (req, res) => {
     return res.status(404).json({ error: 'Game not found or already completed.' });
   }
 
-  // The session guard ensures the user is attempting to execute the game they just planned.
+  // Session guard — must be the game this user was just planning
   if (req.session.currentGameId !== gameId) {
     return res.status(403).json({ error: 'Session/game mismatch.' });
   }
 
   const isValid = validateRoute(route, game.start_station_id, game.end_station_id);
 
-  // If the route is invalid or incomplete, the player immediately scores a zero.
   if (!isValid) {
     db.prepare('UPDATE games SET score = 0 WHERE id = ?').run(gameId);
     req.session.currentGameId = null;
     return res.json({ valid: false, finalScore: 0, steps: [] });
   }
 
-  // If the route is valid, the simulation walks the path, applying one random event per segment.
+  // Execute: walk the valid route, apply one random event per segment
   const STARTING_COINS = 20;
   let coins = STARTING_COINS;
   const steps = [];
@@ -382,7 +380,6 @@ app.post('/api/execute-route', isLoggedIn, (req, res) => {
     });
   }
 
-  // The final score cannot drop below zero.
   const finalScore = Math.max(0, coins);
 
   db.prepare('UPDATE games SET score = ? WHERE id = ?').run(finalScore, gameId);
@@ -391,9 +388,8 @@ app.post('/api/execute-route', isLoggedIn, (req, res) => {
   res.json({ valid: true, finalScore, steps });
 });
 
-// Server Startup
+// ── Server ────────────────────────────────────────────────────────────────────
 
 app.listen(port, () => {
   console.log(`Server listening at http://localhost:${port}`);
 });
-

@@ -1,0 +1,6 @@
+# Root-level safety net — actual per-directory ignores live in client/ and server/
+node_modules/
+.DS_Store
+
+# Claude Code
+.claude/
