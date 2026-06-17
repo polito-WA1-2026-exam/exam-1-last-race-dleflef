@@ -1,23 +1,21 @@
-// All server communication lives here.
-// The Vite proxy forwards /api/* to http://localhost:3001,
-// so we never hard-code the backend host.
+const SERVER_URL = 'http://localhost:3001';
 
 async function handleResponse(res) {
   const data = await res.json();
-  if (!res.ok) throw data; // propagate { error: '...' } objects
+  if (!res.ok) throw data; // the error object from the server is re-thrown so callers can handle it
   return data;
 }
 
 const API = {
-  // ── Auth ────────────────────────────────────────────────────────────────────
+  // Auth
 
   getCurrentSession() {
-    return fetch('/api/sessions/current', { credentials: 'include' })
+    return fetch(`${SERVER_URL}/api/sessions/current`, { credentials: 'include' })
       .then(handleResponse);
   },
 
   login(username, password) {
-    return fetch('/api/sessions', {
+    return fetch(`${SERVER_URL}/api/sessions`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -26,30 +24,33 @@ const API = {
   },
 
   logout() {
-    return fetch('/api/sessions/current', {
+    return fetch(`${SERVER_URL}/api/sessions/current`, {
       method: 'DELETE',
       credentials: 'include',
     });
   },
 
-  // ── Game ─────────────────────────────────────────────────────────────────────
+  // Game
 
-  // Full network for the Setup phase (lines, stations, segments with line colours).
+  getEvents() {
+    return fetch(`${SERVER_URL}/api/events`, { credentials: 'include' })
+      .then(handleResponse);
+  },
+
   getNetwork() {
-    return fetch('/api/network', { credentials: 'include' })
+    return fetch(`${SERVER_URL}/api/network`, { credentials: 'include' })
       .then(handleResponse);
   },
 
-  // Start a new game: server picks start + destination, returns gameId + segments.
   startGame() {
-    return fetch('/api/planning', { credentials: 'include' })
-      .then(handleResponse);
+    return fetch(`${SERVER_URL}/api/planning`, {
+      method: 'POST',
+      credentials: 'include',
+    }).then(handleResponse);
   },
 
-  // Submit the player's route.
-  // route: number[]  — ordered station IDs
   executeRoute(gameId, route) {
-    return fetch('/api/execute-route', {
+    return fetch(`${SERVER_URL}/api/execute-route`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -57,9 +58,8 @@ const API = {
     }).then(handleResponse);
   },
 
-  // Leaderboard: best score per user.
   getRanking() {
-    return fetch('/api/ranking', { credentials: 'include' })
+    return fetch(`${SERVER_URL}/api/ranking`, { credentials: 'include' })
       .then(handleResponse);
   },
 };

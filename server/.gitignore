@@ -2,3 +2,6 @@ node_modules/
 .DS_Store
 Desktop.ini
 Thumbs.db
+*.db
+*.db-shm
+*.db-wal

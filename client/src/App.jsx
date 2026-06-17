@@ -19,7 +19,6 @@ export default function App() {
           <Route path="/login"   element={<LoginPage />} />
           <Route path="/game"    element={<ProtectedRoute><GamePage /></ProtectedRoute>} />
           <Route path="/ranking" element={<ProtectedRoute><RankingPage /></ProtectedRoute>} />
-          {/* Any unknown path falls back to home */}
           <Route path="*"        element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
