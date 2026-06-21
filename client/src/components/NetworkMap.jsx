@@ -43,11 +43,6 @@ export default function NetworkMap({
   tailStationId = null,
   routeStationIds = [],
 }) {
-  const stationById = useMemo(
-    () => Object.fromEntries(stations.map(s => [s.id, s])),
-    [stations]
-  );
-
   const interchangeIds = useMemo(() => {
     const lineCount = {};
     for (const line of lines) {
@@ -94,34 +89,11 @@ export default function NetworkMap({
         );
       })}
 
-      {/* Dashed route trace drawn along the player's built path during planning */}
-      {!showLines && routeStationIds.length > 1 && routeStationIds.map((id, i) => {
-        if (i === 0) return null;
-        const prev = stationById[routeStationIds[i - 1]];
-        const curr = stationById[id];
-        if (!prev || !curr) return null;
-        const p1 = POSITIONS[prev.name];
-        const p2 = POSITIONS[curr.name];
-        if (!p1 || !p2) return null;
-        return (
-          <line
-            key={`route-${i}`}
-            x1={p1.x} y1={p1.y}
-            x2={p2.x} y2={p2.y}
-            stroke="#ffc107"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeDasharray="6 3"
-            opacity="0.7"
-          />
-        );
-      })}
-
       {/* Station nodes */}
       {stations.map(station => {
         const pos = POSITIONS[station.name];
         if (!pos) return null;
-        const isInterchange = interchangeIds.has(station.id);
+        const isInterchange = showLines && interchangeIds.has(station.id);
         const r = isInterchange ? 10 : 7;
         const fill = stationFill(station);
         const labelY = pos.labelAbove ? pos.y - 14 : pos.y + 20;

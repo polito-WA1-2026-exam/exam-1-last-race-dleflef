@@ -42,6 +42,7 @@ export default function ResultPhase({ executionResult, onPlayAgain }) {
               <li>start at the assigned starting station</li>
               <li>end at the assigned destination</li>
               <li>use only real tunnel segments between adjacent stations</li>
+              <li>not use the same segment more than once</li>
               <li>change lines <strong>only</strong> at interchange stations</li>
             </ul>
           </Alert>

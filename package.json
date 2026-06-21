@@ -9,6 +9,6 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
-    "playwright": "^1.61.0"
+    "nodemon": "^3.1.10"
   }
 }

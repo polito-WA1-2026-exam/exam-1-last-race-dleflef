@@ -14,8 +14,18 @@ db.pragma('journal_mode = WAL');
 // Foreign key constraints are enforced to prevent orphaned records.
 db.pragma('foreign_keys = ON');
 
-// The core tables are created with IF NOT EXISTS so the application can be restarted
-// safely without overwriting existing data.
+// Every server start wipes and recreates the schema from scratch, so the app
+// always boots into the same known state instead of accumulating leftover
+// data from previous dev/test sessions. There is no registration endpoint,
+// so the only users that ever exist are the three seeded below.
+db.exec(`
+  DROP TABLE IF EXISTS games;
+  DROP TABLE IF EXISTS users;
+  DROP TABLE IF EXISTS events;
+  DROP TABLE IF EXISTS line_stations;
+  DROP TABLE IF EXISTS stations;
+  DROP TABLE IF EXISTS lines;
+`);
 
 db.exec(`
   -- The coloured metro routes in the network are stored here.
@@ -85,13 +95,9 @@ function hashPassword(password) {
 }
 
 // Database seed
-// This function is executed once at startup; if the database is not empty, it returns immediately.
+// The schema was just dropped and recreated above, so this always runs against empty tables.
 
-function seedIfEmpty() {
-  // The lines table is checked; if data is already present the function exits early.
-  const count = db.prepare('SELECT COUNT(*) AS c FROM lines').get().c;
-  if (count > 0) return;
-
+function seed() {
   // The fictional Italian underground network consists of 12 stations across 4 lines,
   // with 4 interchange stations, each served by exactly 2 lines (33% of total, within the 50% limit).
   //
@@ -206,6 +212,6 @@ function seedIfEmpty() {
 }
 
 // The seed function is executed immediately when the module is loaded.
-seedIfEmpty();
+seed();
 
 export default db;

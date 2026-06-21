@@ -54,8 +54,8 @@ export default function PlanningPhase({
         {/* Map showing stations only; line connections are hidden during planning */}
         <Col lg={7}>
           <Alert variant="info" className="py-2 small mb-2">
-            🕵️ <strong>Lines are hidden</strong> — click any segments on the right to build
-            your route from memory. Your route must start at{' '}
+            🕵️ <strong>Lines are hidden.</strong> Build your route from memory by clicking
+            segments on the right that continue it, one at a time. Your route must start at{' '}
             <strong>{planningData.startStation.name}</strong> and end at{' '}
             <strong>{planningData.endStation.name}</strong>. An invalid or incomplete route scores zero.
           </Alert>
@@ -126,7 +126,7 @@ export default function PlanningPhase({
 
           {/* Segment list */}
           <div className="fw-semibold mb-2 small text-uppercase text-muted">
-            Segments — click any to add to your route
+            Segments. Click one that continues your route to add it
           </div>
           <div className="border rounded">
             {sortedSegments.map(seg => {

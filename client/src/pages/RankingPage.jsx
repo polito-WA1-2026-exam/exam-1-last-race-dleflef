@@ -46,22 +46,35 @@ export default function RankingPage() {
             </tr>
           </thead>
           <tbody>
-            {ranking.map((row, i) => (
-              <tr key={row.username}>
-                <td className="fw-bold">
-                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                </td>
-                <td>{row.username}</td>
-                <td>
-                  <Badge
-                    bg={i === 0 ? 'warning' : i === 1 ? 'secondary' : 'primary'}
-                    text={i === 0 ? 'dark' : undefined}
-                  >
-                    {row.best_score} coins
-                  </Badge>
-                </td>
-              </tr>
-            ))}
+            {(() => {
+              // Ranking is already sorted by best_score DESC. Tied scores share the
+              // same rank, and the next distinct score keeps its actual position
+              // (e.g. 1, 1, 3 rather than 1, 1, 2).
+              let rank = 0;
+              let prevScore = null;
+              return ranking.map((row, i) => {
+                if (row.best_score !== prevScore) {
+                  rank = i + 1;
+                  prevScore = row.best_score;
+                }
+                return (
+                  <tr key={row.username}>
+                    <td className="fw-bold">
+                      {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank}
+                    </td>
+                    <td>{row.username}</td>
+                    <td>
+                      <Badge
+                        bg={rank === 1 ? 'warning' : rank === 2 ? 'secondary' : 'primary'}
+                        text={rank === 1 ? 'dark' : undefined}
+                      >
+                        {row.best_score} coins
+                      </Badge>
+                    </td>
+                  </tr>
+                );
+              });
+            })()}
           </tbody>
         </Table>
       )}
