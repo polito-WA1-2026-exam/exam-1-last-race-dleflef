@@ -1,5 +1,5 @@
 # Exam #1: "Last Race"
-## Student: s<!-- YOUR_ID --> <!-- LASTNAME FIRSTNAME -->
+## Student: s338142 LEFLEF DAGHAN UFUK 
 
 ## How to Run
 
